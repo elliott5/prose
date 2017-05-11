@@ -8,6 +8,7 @@ import (
 
 	"github.com/jdkato/prose/internal/util"
 	"github.com/jdkato/prose/tokenize"
+	"github.com/montanaflynn/stats"
 )
 
 // A Word represents a single word in a Document.
@@ -53,12 +54,24 @@ type Document struct {
 
 // An Assessment provides comprehensive access to a Document's metrics.
 type Assessment struct {
-	AutomatedReadability float64
-	FleschKincaid        float64
-	ReadingEase          float64
-	GunningFog           float64
-	SMOG                 float64
-	DaleChall            float64
+
+	// assessments returning an estimated grade level
+
+	AutomatedReadability float64 // https://en.wikipedia.org/wiki/Automated_readability_index
+	ColemanLiau          float64 // https://en.wikipedia.org/wiki/Coleman%E2%80%93Liau_index
+	FleschKincaid        float64 // https://en.wikipedia.org/wiki/Flesch%E2%80%93Kincaid_readability_tests
+	GunningFog           float64 // https://en.wikipedia.org/wiki/Gunning_fog_index
+	SMOG                 float64 // https://en.wikipedia.org/wiki/SMOG
+
+	// mean & standard deviation of the above estimated grade levels
+
+	MeanGradeLevel   float64
+	StdDevGradeLevel float64
+
+	// assessments Not returning an estimated grade level
+
+	DaleChall   float64 // https://en.wikipedia.org/wiki/Dale%E2%80%93Chall_readability_formula
+	ReadingEase float64 // https://en.wikipedia.org/wiki/Flesch%E2%80%93Kincaid_readability_tests
 }
 
 // NewDocument is a Document constructor that takes a string as an argument. It
@@ -109,10 +122,26 @@ func (d *Document) Initialize() {
 
 // Assess returns an Assessment for the Document d.
 func (d *Document) Assess() *Assessment {
-	return &Assessment{
+	a := Assessment{
 		FleschKincaid: d.FleschKincaid(), ReadingEase: d.FleschReadingEase(),
 		GunningFog: d.GunningFog(), SMOG: d.SMOG(), DaleChall: d.DaleChall(),
-		AutomatedReadability: d.AutomatedReadability()}
+		AutomatedReadability: d.AutomatedReadability(), ColemanLiau: d.ColemanLiau()}
+
+	gradeScores := []float64{
+		a.FleschKincaid, a.AutomatedReadability, a.GunningFog, a.SMOG,
+		a.ColemanLiau}
+
+	mean, merr := stats.Mean(gradeScores)
+	stdDev, serr := stats.StandardDeviation(gradeScores)
+	if merr != nil || serr != nil {
+		a.MeanGradeLevel = 0.0
+		a.StdDevGradeLevel = 0.0
+	} else {
+		a.MeanGradeLevel = mean
+		a.StdDevGradeLevel = stdDev
+	}
+
+	return &a
 }
 
 func isComplex(word string, syllables int) bool {
